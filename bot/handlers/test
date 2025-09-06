@@ -1,0 +1,32 @@
+from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.filters import Command
+from bot.states.registration import Registration
+from bot.db import connect
+
+router = Router()
+
+
+def back_button(callback_data: str):
+    return [InlineKeyboardButton(text="⬅️ Назад", callback_data=callback_data)]
+
+
+# ГЛОБАЛЬНЫЙ ОБРАБОТЧИК: Отсекает любые callback-кнопки после регистрации
+@router.callback_query()
+async def prevent_old_buttons(callback: CallbackQuery, state: FSMContext):
+    conn = await connect()
+    user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", callback.from_user.id)
+    await conn.close()
+
+    # Если юзер уже зарегистрирован
+    if user and user["age"] and user["fitness_goal"]:
+        await callback.answer(
+            "✅ Вы уже зарегистрированы. Кнопки больше не действуют. \nЕсли хотите пройти регистрацию заново — введите /reset",
+            show_alert=True
+        )
+        return
+
+    # Если не зареган, передаём обработку дальше
+    await callback.answer()
+    raise types.SkipHandler
