@@ -2,13 +2,13 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from bot.db import connect
-from openai import OpenAI
+import openai
 import os
 
 router = Router()
 
 # Инициализация клиента OpenAI
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 @router.message(Command("start"))
@@ -83,7 +83,7 @@ async def chat_with_ai(message: types.Message, state: FSMContext):
     """
 
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
