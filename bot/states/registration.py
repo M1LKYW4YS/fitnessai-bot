@@ -8,4 +8,7 @@ class Registration(StatesGroup):
     weight = State()
     activity_level = State()
     experience_level = State()
-    disability_status = State()
+    has_injury = State()  # Есть ли травмы?
+    injury_details = State()  # Уточнение травм
+    has_health_condition = State()  # Есть ли заболевания?
+    health_details = State()
