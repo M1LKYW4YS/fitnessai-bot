@@ -406,6 +406,46 @@ async def process_health_details(message: types.Message, state: FSMContext):
     await state.update_data(health_details=message.text.strip())
     await finalize_registration(message, state)
 
+# --- НАЗАД С БОЛЕЗНЕЙ К ТРАВМАМ ---
+@router.callback_query(F.data == "back_injury")
+async def go_back_to_injury(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Нет", callback_data="injury_no")],
+        [InlineKeyboardButton(text="Да", callback_data="injury_yes")],
+        back_button("back_experience")
+    ])
+    await callback.message.answer(
+        "Есть ли у вас травмы, которые могут повлиять на тренировки?",
+        reply_markup=keyboard
+    )
+    await state.set_state(Registration.injury_details)
+    await callback.answer()
+
+
+# --- НАЗАД С БОЛЕЗНЕЙ ---
+@router.callback_query(F.data == "back_health")
+async def go_back_to_health(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Нет", callback_data="health_no")],
+        [InlineKeyboardButton(text="Да", callback_data="health_yes")],
+        back_button("back_injury")
+    ])
+    await callback.message.answer(
+        "Есть ли у вас заболевания, которые могут повлиять на тренировки?",
+        reply_markup=keyboard
+    )
+    await state.set_state(Registration.has_health_condition)
+    await callback.answer()
 
 # --- ФИНАЛ ---
 async def finalize_registration(event, state: FSMContext):
