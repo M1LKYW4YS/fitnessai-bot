@@ -425,8 +425,20 @@ async def finalize_registration(event, state: FSMContext):
     """Финальное сохранение данных пользователя"""
     data = await state.get_data()
 
-    # Убеждаемся, что event имеет message (работает и для callback, и для message)
-    message = event.message if hasattr(event, "message") else event
+    # Определяем объект message корректно
+    if isinstance(event, types.CallbackQuery):
+        message = event.message
+        user = event.from_user
+    else:
+        message = event
+        user = event.from_user
+
+    # Проверяем, есть ли все нужные данные
+    required_fields = ["age", "sex", "fitness_goal", "height", "weight", "activity_level", "experience_level"]
+    for field in required_fields:
+        if field not in data:
+            await message.answer(f"⚠️ Ошибка: отсутствует поле {field}. Попробуйте пройти регистрацию заново (/register).")
+            return
 
     conn = await connect()
     await conn.execute("""
@@ -445,8 +457,8 @@ async def finalize_registration(event, state: FSMContext):
             injury_info = EXCLUDED.injury_info,
             health_conditions = EXCLUDED.health_conditions
     """,
-        message.from_user.id,
-        message.from_user.full_name,
+        user.id,
+        user.full_name,
         data["age"],
         data["sex"],
         data["fitness_goal"],
@@ -459,7 +471,7 @@ async def finalize_registration(event, state: FSMContext):
     )
     await conn.close()
 
-    # Завершение
+    # ✅ Завершаем регистрацию и очищаем состояние
     await message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
     await state.clear()
 
