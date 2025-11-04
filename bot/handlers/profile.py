@@ -42,7 +42,8 @@ async def profile_cmd(message: types.Message):
             f"Цель: {user['fitness_goal'] or 'Не указано'}\n"
             f"Уровень активности: {activity_display}\n"
             f"Опыт: {experience_display}\n"
-            f"Инвалидность: {'Да' if user['disability_status'] else 'Нет'}\n"
+            f"Травмы: {user['injury_info'] or 'Нет'}\n"
+            f"Заболевания: {user['health_conditions'] or 'Нет'}"
             f"Дата регистрации: {user['created_at'].strftime('%d.%m.%Y %H:%M') if user['created_at'] else 'Не указано'}"
         )
         await message.answer(profile_info)

@@ -313,20 +313,17 @@ async def process_experience(callback: CallbackQuery, state: FSMContext):
     await state.update_data(experience_level=experience)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Да", callback_data="disability_yes")],
-        [InlineKeyboardButton(text="Нет", callback_data="disability_no")],
+        [InlineKeyboardButton(text="Нет", callback_data="injury_no")],
+        [InlineKeyboardButton(text="Да", callback_data="injury_yes")],
         back_button("back_experience")
     ])
-    await callback.message.answer("У вас есть инвалидность?", reply_markup=keyboard)
-    await state.set_state(Registration.disability_status)
+    await callback.message.answer("Есть ли у вас травмы, которые могут повлиять на тренировки?", reply_markup=keyboard)
+    await state.set_state(Registration.injury_info)
     await callback.answer()
+
 
 @router.callback_query(F.data == "back_experience")
 async def go_back_to_experience(callback: CallbackQuery, state: FSMContext):
-    if await is_registered_user(callback.from_user.id):
-        await callback.answer("❗ Вы уже зарегистрированы.", show_alert=True)
-        return
-
     try:
         await callback.message.delete()
     except:
@@ -342,26 +339,94 @@ async def go_back_to_experience(callback: CallbackQuery, state: FSMContext):
     await state.set_state(Registration.experience_level)
     await callback.answer()
 
-@router.callback_query(F.data.startswith("disability_"))
-async def process_disability(callback: CallbackQuery, state: FSMContext):
-    if await is_registered_user(callback.from_user.id):
-        await callback.answer("❗ Вы уже зарегистрированы.", show_alert=True)
-        return
+
+@router.callback_query(F.data.startswith("injury_"))
+async def process_injury(callback: CallbackQuery, state: FSMContext):
+    has_injury = callback.data.split("_")[1] == "yes"
+    await state.update_data(has_injury=has_injury)
 
     try:
         await callback.message.delete()
     except:
         pass
 
-    has_disability = callback.data.split("_")[1] == "yes"
-    await state.update_data(disability_status=has_disability)
+    if has_injury:
+        await callback.message.answer("Пожалуйста, уточните, какие у вас травмы:")
+        await state.set_state(Registration.injury_details)
+    else:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Нет", callback_data="health_no")],
+            [InlineKeyboardButton(text="Да", callback_data="health_yes")],
+            back_button("back_injury")
+        ])
+        await callback.message.answer("Есть ли у вас заболевания, которые могут повлиять на тренировки?", reply_markup=keyboard)
+        await state.set_state(Registration.health_conditions)
 
+    await callback.answer()
+
+
+@router.message(Registration.injury_details)
+async def process_injury_details(message: types.Message, state: FSMContext):
+    await state.update_data(injury_info=message.text)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Нет", callback_data="health_no")],
+        [InlineKeyboardButton(text="Да", callback_data="health_yes")],
+        back_button("back_injury")
+    ])
+    await message.answer("Есть ли у вас заболевания, которые могут повлиять на тренировки?", reply_markup=keyboard)
+    await state.set_state(Registration.health_conditions)
+
+
+@router.callback_query(F.data == "back_injury")
+async def go_back_to_injury(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Нет", callback_data="injury_no")],
+        [InlineKeyboardButton(text="Да", callback_data="injury_yes")],
+        back_button("back_experience")
+    ])
+    await callback.message.answer("Есть ли у вас травмы, которые могут повлиять на тренировки?", reply_markup=keyboard)
+    await state.set_state(Registration.injury_info)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("health_"))
+async def process_health(callback: CallbackQuery, state: FSMContext):
+    has_health_issue = callback.data.split("_")[1] == "yes"
+    await state.update_data(has_health_issue=has_health_issue)
+
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    if has_health_issue:
+        await callback.message.answer("Пожалуйста, уточните, какие заболевания:")
+        await state.set_state(Registration.health_details)
+    else:
+        await finalize_registration(callback, state)
+
+
+@router.message(Registration.health_details)
+async def process_health_details(message: types.Message, state: FSMContext):
+    await state.update_data(health_conditions=message.text)
+    await finalize_registration(message, state)
+
+
+async def finalize_registration(event, state: FSMContext):
+    """Финальное сохранение данных пользователя"""
     data = await state.get_data()
 
     conn = await connect()
     await conn.execute("""
-        INSERT INTO users (id, name, age, sex, fitness_goal, height_cm, weight_kg, activity_level, experience_level, disability_status)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        INSERT INTO users (id, name, age, sex, fitness_goal, height_cm, weight_kg,
+                           activity_level, experience_level, injury_info, health_conditions)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             age = EXCLUDED.age,
@@ -371,10 +436,11 @@ async def process_disability(callback: CallbackQuery, state: FSMContext):
             weight_kg = EXCLUDED.weight_kg,
             activity_level = EXCLUDED.activity_level,
             experience_level = EXCLUDED.experience_level,
-            disability_status = EXCLUDED.disability_status
+            injury_info = EXCLUDED.injury_info,
+            health_conditions = EXCLUDED.health_conditions
     """,
-        callback.from_user.id,
-        callback.from_user.full_name,
+        event.from_user.id,
+        event.from_user.full_name,
         data["age"],
         data["sex"],
         data["fitness_goal"],
@@ -382,55 +448,11 @@ async def process_disability(callback: CallbackQuery, state: FSMContext):
         data["weight"],
         data["activity_level"],
         data["experience_level"],
-        has_disability
+        data.get("injury_info", "нет"),
+        data.get("health_conditions", "нет")
     )
     await conn.close()
 
-    await callback.message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
-
-    # Удалить inline-кнопки с предыдущего сообщения
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except:
-        pass
-
+    await event.message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
     await state.clear()
-    await callback.answer()
-
-@router.message(Command("reset"))
-async def confirm_reset(message: types.Message):
-    conn = await connect()
-    user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", message.from_user.id)
-    await conn.close()
-
-    if not user or user["age"] is None or user["fitness_goal"] is None:
-        await message.answer("🔒 Сначала завершите регистрацию.")
-        return
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Да, сбросить профиль")],
-            [KeyboardButton(text="Нет, отмена")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await message.answer(
-        "⚠️ Вы уверены, что хотите сбросить ваш профиль? Это действие необратимо.",
-        reply_markup=keyboard
-    )
-
-@router.message(F.text.in_(["Да, сбросить профиль", "Нет, отмена"]))
-async def handle_reset_confirm(message: types.Message):
-    if message.text == "Да, сбросить профиль":
-        conn = await connect()
-        await conn.execute("DELETE FROM users WHERE id = $1", message.from_user.id)
-        await conn.close()
-        await message.answer(
-            "✅ Профиль успешно удалён. Вы можете начать заново с команды /register",
-            reply_markup=ReplyKeyboardRemove()
-        )
-    else:
-        await message.answer("❎ Сброс отменён.", reply_markup=ReplyKeyboardRemove())
-
 
