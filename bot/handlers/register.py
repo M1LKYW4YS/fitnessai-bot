@@ -408,12 +408,14 @@ async def process_health(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Пожалуйста, уточните, какие заболевания:")
         await state.set_state(Registration.health_details)
     else:
+        # если заболеваний нет — сразу завершаем регистрацию
         await finalize_registration(callback, state)
     await callback.answer()
 
 
 @router.message(Registration.health_details)
 async def process_health_details(message: types.Message, state: FSMContext):
+    """Обработка текстового ввода при уточнении болезней"""
     await state.update_data(health_conditions=message.text.strip())
     await finalize_registration(message, state)
 
@@ -422,6 +424,9 @@ async def process_health_details(message: types.Message, state: FSMContext):
 async def finalize_registration(event, state: FSMContext):
     """Финальное сохранение данных пользователя"""
     data = await state.get_data()
+
+    # Убеждаемся, что event имеет message (работает и для callback, и для message)
+    message = event.message if hasattr(event, "message") else event
 
     conn = await connect()
     await conn.execute("""
@@ -440,8 +445,8 @@ async def finalize_registration(event, state: FSMContext):
             injury_info = EXCLUDED.injury_info,
             health_conditions = EXCLUDED.health_conditions
     """,
-        event.from_user.id,
-        event.from_user.full_name,
+        message.from_user.id,
+        message.from_user.full_name,
         data["age"],
         data["sex"],
         data["fitness_goal"],
@@ -454,8 +459,7 @@ async def finalize_registration(event, state: FSMContext):
     )
     await conn.close()
 
-    # гарантированное получение объекта message
-    msg = event.message if hasattr(event, "message") else event
-    await msg.answer("✅ Спасибо! Вы успешно зарегистрированы.")
+    # Завершение
+    await message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
     await state.clear()
 
