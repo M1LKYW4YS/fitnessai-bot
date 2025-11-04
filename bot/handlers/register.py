@@ -300,10 +300,6 @@ async def go_back_to_activity(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("exp_"))
 async def process_experience(callback: CallbackQuery, state: FSMContext):
-    if await is_registered_user(callback.from_user.id):
-        await callback.answer("❗ Вы уже зарегистрированы.", show_alert=True)
-        return
-
     try:
         await callback.message.delete()
     except:
@@ -340,6 +336,7 @@ async def go_back_to_experience(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# --- ТРАВМЫ ---
 @router.callback_query(F.data.startswith("injury_"))
 async def process_injury(callback: CallbackQuery, state: FSMContext):
     has_injury = callback.data.split("_")[1] == "yes"
@@ -367,7 +364,8 @@ async def process_injury(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Registration.injury_details)
 async def process_injury_details(message: types.Message, state: FSMContext):
-    await state.update_data(injury_info=message.text)
+    # сохраняем текст как описание травм
+    await state.update_data(injury_info=message.text.strip())
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Нет", callback_data="health_no")],
@@ -395,6 +393,7 @@ async def go_back_to_injury(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# --- ЗАБОЛЕВАНИЯ ---
 @router.callback_query(F.data.startswith("health_"))
 async def process_health(callback: CallbackQuery, state: FSMContext):
     has_health_issue = callback.data.split("_")[1] == "yes"
@@ -410,14 +409,16 @@ async def process_health(callback: CallbackQuery, state: FSMContext):
         await state.set_state(Registration.health_details)
     else:
         await finalize_registration(callback, state)
+    await callback.answer()
 
 
 @router.message(Registration.health_details)
 async def process_health_details(message: types.Message, state: FSMContext):
-    await state.update_data(health_conditions=message.text)
+    await state.update_data(health_conditions=message.text.strip())
     await finalize_registration(message, state)
 
 
+# --- ФИНАЛ ---
 async def finalize_registration(event, state: FSMContext):
     """Финальное сохранение данных пользователя"""
     data = await state.get_data()
@@ -453,6 +454,8 @@ async def finalize_registration(event, state: FSMContext):
     )
     await conn.close()
 
-    await event.message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
+    # гарантированное получение объекта message
+    msg = event.message if hasattr(event, "message") else event
+    await msg.answer("✅ Спасибо! Вы успешно зарегистрированы.")
     await state.clear()
 
