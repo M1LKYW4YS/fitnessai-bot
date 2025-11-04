@@ -20,6 +20,7 @@ async def confirm_reset(message: types.Message):
         [InlineKeyboardButton(text="✅ Да, сбросить", callback_data="reset_yes")],
         [InlineKeyboardButton(text="❌ Нет", callback_data="reset_no")]
     ])
+
     await message.answer(
         "Вы уверены, что хотите сбросить профиль? Это действие необратимо.",
         reply_markup=keyboard
@@ -33,13 +34,13 @@ async def process_reset(callback: CallbackQuery):
 
     if not user:
         await callback.message.answer("Пользователь не найден. Напишите /register для начала.")
-        await callback.answer()
         await conn.close()
+        await callback.answer()
         return
 
     await conn.execute(
         """
-        UPDATE users 
+        UPDATE users
         SET 
             age = NULL,
             sex = NULL,
@@ -56,7 +57,7 @@ async def process_reset(callback: CallbackQuery):
     )
     await conn.close()
 
-    await callback.message.answer("🗑️ Ваш профиль был успешно сброшен.")
+    await callback.message.answer("🗑 Ваш профиль был успешно сброшен.")
     await callback.answer()
 
 # Пользователь отменил сброс
