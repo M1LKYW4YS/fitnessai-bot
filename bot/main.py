@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from bot.config import BOT_TOKEN
-from bot.handlers import start, register, profile
+from bot.handlers import start, register, profile, reset
 from bot.set_commands import set_bot_commands
 
 
@@ -15,16 +15,16 @@ async def set_bot_commands(bot: Bot):
     ]
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
-
 async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
 
-    # 🧩 Подключаем роутеры в правильном порядке
+    # 🧩 Подключаем все роутеры в правильном порядке
     dp.include_routers(
-        register.router,  # сначала регистрация
-        profile.router,   # потом профиль
-        start.router      # ИИ и команда /start — в конце
+        register.router,  # регистрация
+        profile.router,  # профиль
+        reset.router,  # ✅ добавили reset сюда
+        start.router  # команда /start — в конце
     )
 
     await set_bot_commands(bot)
