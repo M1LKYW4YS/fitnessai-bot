@@ -314,7 +314,7 @@ async def process_experience(callback: CallbackQuery, state: FSMContext):
         back_button("back_experience")
     ])
     await callback.message.answer("Есть ли у вас травмы, которые могут повлиять на тренировки?", reply_markup=keyboard)
-    await state.set_state(Registration.injury_info)
+    await state.set_state(Registration.injury_details)
     await callback.answer()
 
 
@@ -356,67 +356,54 @@ async def process_injury(callback: CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="Да", callback_data="health_yes")],
             back_button("back_injury")
         ])
-        await callback.message.answer("Есть ли у вас заболевания, которые могут повлиять на тренировки?", reply_markup=keyboard)
-        await state.set_state(Registration.health_conditions)
+        await callback.message.answer(
+            "Есть ли у вас заболевания, которые могут повлиять на тренировки?",
+            reply_markup=keyboard
+        )
+        await state.set_state(Registration.has_health_condition)
 
     await callback.answer()
 
 
 @router.message(Registration.injury_details)
 async def process_injury_details(message: types.Message, state: FSMContext):
-    # сохраняем текст как описание травм
-    await state.update_data(injury_info=message.text.strip())
+    await state.update_data(injury_details=message.text.strip())
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Нет", callback_data="health_no")],
         [InlineKeyboardButton(text="Да", callback_data="health_yes")],
         back_button("back_injury")
     ])
-    await message.answer("Есть ли у вас заболевания, которые могут повлиять на тренировки?", reply_markup=keyboard)
-    await state.set_state(Registration.health_conditions)
-
-
-@router.callback_query(F.data == "back_injury")
-async def go_back_to_injury(callback: CallbackQuery, state: FSMContext):
-    try:
-        await callback.message.delete()
-    except:
-        pass
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Нет", callback_data="injury_no")],
-        [InlineKeyboardButton(text="Да", callback_data="injury_yes")],
-        back_button("back_experience")
-    ])
-    await callback.message.answer("Есть ли у вас травмы, которые могут повлиять на тренировки?", reply_markup=keyboard)
-    await state.set_state(Registration.injury_info)
-    await callback.answer()
+    await message.answer(
+        "Есть ли у вас заболевания, которые могут повлиять на тренировки?",
+        reply_markup=keyboard
+    )
+    await state.set_state(Registration.has_health_condition)
 
 
 # --- ЗАБОЛЕВАНИЯ ---
 @router.callback_query(F.data.startswith("health_"))
 async def process_health(callback: CallbackQuery, state: FSMContext):
-    has_health_issue = callback.data.split("_")[1] == "yes"
-    await state.update_data(has_health_issue=has_health_issue)
+    has_condition = callback.data.split("_")[1] == "yes"
+    await state.update_data(has_health_condition=has_condition)
 
     try:
         await callback.message.delete()
     except:
         pass
 
-    if has_health_issue:
+    if has_condition:
         await callback.message.answer("Пожалуйста, уточните, какие заболевания:")
         await state.set_state(Registration.health_details)
     else:
-        # если заболеваний нет — сразу завершаем регистрацию
         await finalize_registration(callback, state)
+
     await callback.answer()
 
 
 @router.message(Registration.health_details)
 async def process_health_details(message: types.Message, state: FSMContext):
-    """Обработка текстового ввода при уточнении болезней"""
-    await state.update_data(health_conditions=message.text.strip())
+    await state.update_data(health_details=message.text.strip())
     await finalize_registration(message, state)
 
 
@@ -425,20 +412,12 @@ async def finalize_registration(event, state: FSMContext):
     """Финальное сохранение данных пользователя"""
     data = await state.get_data()
 
-    # Определяем объект message корректно
     if isinstance(event, types.CallbackQuery):
         message = event.message
         user = event.from_user
     else:
         message = event
         user = event.from_user
-
-    # Проверяем, есть ли все нужные данные
-    required_fields = ["age", "sex", "fitness_goal", "height", "weight", "activity_level", "experience_level"]
-    for field in required_fields:
-        if field not in data:
-            await message.answer(f"⚠️ Ошибка: отсутствует поле {field}. Попробуйте пройти регистрацию заново (/register).")
-            return
 
     conn = await connect()
     await conn.execute("""
@@ -466,12 +445,11 @@ async def finalize_registration(event, state: FSMContext):
         data["weight"],
         data["activity_level"],
         data["experience_level"],
-        data.get("injury_info", "нет"),
-        data.get("health_conditions", "нет")
+        data.get("injury_details", "нет"),
+        data.get("health_details", "нет")
     )
     await conn.close()
 
-    # ✅ Завершаем регистрацию и очищаем состояние
     await message.answer("✅ Спасибо! Вы успешно зарегистрированы.")
     await state.clear()
 
